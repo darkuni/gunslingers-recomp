@@ -1,0 +1,19 @@
+80125C90 OSLink_Link        # static Link(module, bss, fixed) in OSLink.c (OSLink = li r5,0; b Link)
+80125F80 OSLink
+801261D0 OSUnlink
+80174400 KPADiRead          # KPADRead(chan,buf,len) = li r6,0; li r7,0; b KPADiRead
+80174C10 KPADInit
+80174C20 KPADInitEx
+8000DBB0 gcsetjmp           # Hudson coroutine setjmp (HuPrc)
+8000DC30 gclongjmp
+8000F7D0 HuPrcCreate
+8000FA70 HuPrcChildWatch
+8000FE40 HuPrcEnd
+8000FF20 HuPrcSleep
+8000FF80 HuPrcVSleep
+8000FFF0 HuPrcCall
+8015D230 WPADSetSamplingCallback
+8015D2C0 WPADSetConnectCallback
+8015D3B0 WPADGetDataFormat
+8015D400 WPADSetDataFormat
+8015D4C0 WPADGetInfo        # sync: WPADGetInfoAsync + wait for __infoCallback
