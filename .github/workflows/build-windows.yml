@@ -1,7 +1,8 @@
 name: Build Windows and Linux
 
-# Every push to main builds the Windows package (download it from the run's "Artifacts").
-# Publishing a GitHub Release (or pushing a v* tag) builds it and attaches the zip to the release.
+# Every push to main builds the Windows and Linux packages (download them from the run's "Artifacts").
+# Publishing a GitHub Release, pushing a v* tag, or a push to main whose commit message starts with
+# "release vX.Y.Z" builds them and attaches both to that release (created, with its tag, if needed).
 on:
   push:
     branches: [main]
@@ -45,9 +46,14 @@ jobs:
           ninja -C build-win -j3
 
       - name: Package
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           V=${GITHUB_REF_NAME}
-          [[ "$GITHUB_REF" == refs/tags/* ]] || V=dev-${GITHUB_SHA::7}
+          MSG=$(printf '%s' "$HEAD_MSG" | head -1)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then :
+          elif [[ "$MSG" =~ ^release\ (v[0-9][0-9A-Za-z.-]*) ]]; then V=${BASH_REMATCH[1]}
+          else V=dev-${GITHUB_SHA::7}; fi
           P=Gunslingers
           mkdir -p pkg/$P
           cp src/build-win/gunslingers.exe SDL2-2.30.9/x86_64-w64-mingw32/bin/SDL2.dll \
@@ -62,12 +68,11 @@ jobs:
           name: ${{ env.ZIP }}
           path: pkg/
 
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          files: ${{ env.ZIP }}
-          generate_release_notes: true
+          name: release-win
+          path: ${{ env.ZIP }}
+
 
   linux:
     runs-on: ubuntu-22.04   # older glibc: runs on SteamOS and most current distros
@@ -93,9 +98,14 @@ jobs:
           ninja -C build-linux -j3
 
       - name: Package
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           V=${GITHUB_REF_NAME}
-          [[ "$GITHUB_REF" == refs/tags/* ]] || V=dev-${GITHUB_SHA::7}
+          MSG=$(printf '%s' "$HEAD_MSG" | head -1)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then :
+          elif [[ "$MSG" =~ ^release\ (v[0-9][0-9A-Za-z.-]*) ]]; then V=${BASH_REMATCH[1]}
+          else V=dev-${GITHUB_SHA::7}; fi
           P=Gunslingers
           mkdir -p pkg/$P
           cp src/build-linux/gunslingers src/runtime/ipl-font-licenses.txt dist/README.txt LICENSE THIRD_PARTY_NOTICES.md pkg/$P/
@@ -109,8 +119,29 @@ jobs:
           name: ${{ env.TGZ }}
           path: ${{ env.TGZ }}
 
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    needs: [build, linux]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' || startsWith(github.event.head_commit.message, 'release v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: ${{ env.TGZ }}
+          path: out
+      - name: Files and tag
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          ls -R out
+          T=${GITHUB_REF_NAME}
+          MSG=$(printf '%s' "$HEAD_MSG" | head -1)
+          [[ "$MSG" =~ ^release\ (v[0-9][0-9A-Za-z.-]*) ]] && [[ "$GITHUB_REF" != refs/tags/* ]] && T=${BASH_REMATCH[1]}
+          echo "TAG=$T" >> $GITHUB_ENV
+          mkdir -p rel
+          cp out/release-win/*.zip out/*linux-x64.tar.gz/*.tar.gz rel/
+          ls -la rel
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          files: rel/*
+          generate_release_notes: true
